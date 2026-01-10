@@ -1,4 +1,6 @@
 streamlit
-pandas
 numpy
+pandas
 matplotlib
+opencv-python-headless
+pillow
