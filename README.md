@@ -25,12 +25,6 @@ Unlike standard apps, IntruWatch uses specialized structures for low-latency sec
 
 ## 🚀 Quick Start
 
-1. **Clone & Enter:**
-```bash
-git clone https://github.com/your-user/IntruWatch.git && cd IntruWatch
-
-```
-
 
 2. **Install:**
 ```bash
@@ -45,8 +39,3 @@ streamlit run app.py
 
 ```
 
-
-
----
-
-**Terminal Access:** `admin` | `admin123`
