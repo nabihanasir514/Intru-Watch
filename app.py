@@ -500,9 +500,23 @@ def login_page():
                             st.success(f"ACCESS GRANTED - Welcome, {username}")
                             st.rerun()
                         else:
-                            st.error("AUTHENTICATION BLOCKED - Account email is not verified GIKI format")
+                            # SECURITY ALERT: Invalid email format attempt
+                            st.session_state.alert_system.add_alert(
+                                1,  # High priority
+                                f"SECURITY THREAT: Unverified email login attempt by '{username}'",
+                                "Authentication System"
+                            )
+                            st.session_state.event_log.add_event(f"BLOCKED: Invalid email format for user {username}")
+                            st.error("🚨 AUTHENTICATION BLOCKED - Account email is not verified GIKI format")
                     else:
-                        st.error("AUTHENTICATION FAILED - Invalid credentials")
+                        # SECURITY ALERT: Failed login attempt
+                        st.session_state.alert_system.add_alert(
+                            2,  # Medium priority
+                            f"Failed login attempt for operator ID: '{username}'",
+                            "Authentication System"
+                        )
+                        st.session_state.event_log.add_event(f"FAILED LOGIN: Invalid credentials for {username}")
+                        st.error("🚨 AUTHENTICATION FAILED - Invalid credentials")
                 except AttributeError:
                     # Fallback for old data structure - admin bypass only
                     if username == "admin" and password == "admin123":
@@ -512,7 +526,14 @@ def login_page():
                         st.success(f"ACCESS GRANTED - Welcome, {username}")
                         st.rerun()
                     else:
-                        st.error("AUTHENTICATION FAILED - Please register with a valid GIKI email")
+                        # SECURITY ALERT: Suspicious login with legacy system
+                        st.session_state.alert_system.add_alert(
+                            1,  # High priority - potential breach attempt
+                            f"SUSPICIOUS: Legacy auth attempt by '{username}' - system migration needed",
+                            "Authentication System"
+                        )
+                        st.session_state.event_log.add_event(f"SUSPICIOUS: Legacy login attempt by {username}")
+                        st.error("🚨 AUTHENTICATION FAILED - Please register with a valid GIKI email")
             else:
                 st.warning("All fields required for authentication")
     
