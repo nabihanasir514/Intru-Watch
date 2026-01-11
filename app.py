@@ -1589,7 +1589,7 @@ def about_page():
         <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 15px;">
             <div style="background: rgba(0, 255, 136, 0.05); padding: 10px 15px; border-radius: 6px; border-left: 3px solid #00ff88;">
                 <span style="color: #00ff88; font-family: 'Orbitron', monospace;">Areej Arif</span>
-                <span style="color: #8892a0; font-family: 'Rajdhani', sans-serif;"> - 2024127</span>
+                <span style="color: #8892a0; font-family: 'Rajdhani', sans-serif;"> - 2024113</span>
             </div>
             <div style="background: rgba(0, 255, 136, 0.05); padding: 10px 15px; border-radius: 6px; border-left: 3px solid #00c8ff;">
                 <span style="color: #00c8ff; font-family: 'Orbitron', monospace;">Ayesha Khalid</span>
