@@ -434,7 +434,7 @@ def init_session_state():
     
     # Create default admin if no admins exist
     if not st.session_state.login_list.head:
-        st.session_state.login_list.insert("admin", hash_password("admin123"))
+        st.session_state.login_list.insert("admin", hash_password("admin123"), "admin@giki.edu.pk", "admin")
         save_logins(st.session_state.login_list)
     
     # Initialize guards with sample data
@@ -488,12 +488,17 @@ def login_page():
             username = sanitize_input(username)
             if username and password:
                 password_hash = hash_password(password)
-                if st.session_state.login_list.find(username, password_hash):
-                    st.session_state.logged_in = True
-                    st.session_state.current_user = username
-                    st.session_state.event_log.add_event(f"Operator {username} authenticated")
-                    st.success(f"ACCESS GRANTED - Welcome, {username}")
-                    st.rerun()
+                success, user = st.session_state.login_list.authenticate(username, password_hash)
+                if success:
+                    # Verify email is valid GIKI format
+                    if user.email and is_valid_giki_email(user.email):
+                        st.session_state.logged_in = True
+                        st.session_state.current_user = username
+                        st.session_state.event_log.add_event(f"Operator {username} authenticated")
+                        st.success(f"ACCESS GRANTED - Welcome, {username}")
+                        st.rerun()
+                    else:
+                        st.error("AUTHENTICATION BLOCKED - Account email is not verified GIKI format")
                 else:
                     st.error("AUTHENTICATION FAILED - Invalid credentials")
             else:
@@ -510,16 +515,22 @@ def login_page():
         
         new_username = st.text_input("Operator ID", key="signup_username", placeholder="Choose operator ID")
         new_email = st.text_input("Institutional Email", key="signup_email", placeholder="your.email@giki.edu.pk")
+        
+        # Real-time email validation feedback
+        if new_email and not is_valid_giki_email(new_email):
+            st.error("⚠️ Invalid email format - Must be @giki.edu.pk")
+        
         new_password = st.text_input("Access Code", type="password", key="signup_password", placeholder="Create access code")
         confirm_password = st.text_input("Confirm Access Code", type="password", key="signup_confirm", placeholder="Re-enter access code")
         
         if st.button("REGISTER OPERATOR", key="signup_btn", use_container_width=True):
             new_username = sanitize_input(new_username)
+            new_email = sanitize_input(new_email).lower().strip()
             
             if not new_username or not new_email or not new_password:
                 st.error("All fields required for registration")
             elif not is_valid_giki_email(new_email):
-                st.error("RESTRICTED - Only institutional emails (@giki.edu.pk) permitted")
+                st.error("REGISTRATION BLOCKED - Only institutional emails (@giki.edu.pk) are permitted. Example: yourname@giki.edu.pk")
             elif new_password != confirm_password:
                 st.error("Access codes do not match")
             elif st.session_state.login_list.username_exists(new_username):
@@ -530,7 +541,7 @@ def login_page():
                     st.error(msg)
                 else:
                     password_hash = hash_password(new_password)
-                    st.session_state.login_list.insert(new_username, password_hash)
+                    st.session_state.login_list.insert(new_username, password_hash, new_email)
                     save_logins(st.session_state.login_list)
                     st.success(f"OPERATOR REGISTERED - {new_username} access granted")
 
@@ -598,16 +609,31 @@ def checkin_page():
         
         if st.button("Complete Check-In"):
             username = sanitize_input(username)
-            if username and reg_no:
-                st.session_state.checkin_list.insert(
-                    username, reg_no, designation, gender_code, room_no, employee_no
-                )
-                save_checkins(st.session_state.checkin_list)
-                st.session_state.event_log.add_event(f"{designation} {username} checked in via profile")
-                st.success(f"{designation} {username} successfully checked in!")
-                st.balloons()
+            if not username or not reg_no:
+                st.error("Please fill all required fields")
             else:
-                st.warning("Please fill all required fields")
+                # Strict validation based on designation
+                validation_passed = True
+                
+                if designation == "Student":
+                    valid, msg = validate_registration_number(reg_no)
+                    if not valid:
+                        st.error(f"INVALID REGISTRATION: {msg}")
+                        validation_passed = False
+                elif designation == "Faculty":
+                    valid, msg = validate_employee_id(reg_no)
+                    if not valid:
+                        st.error(f"INVALID EMPLOYEE ID: {msg}")
+                        validation_passed = False
+                
+                if validation_passed:
+                    st.session_state.checkin_list.insert(
+                        username, reg_no, designation, gender_code, room_no, employee_no
+                    )
+                    save_checkins(st.session_state.checkin_list)
+                    st.session_state.event_log.add_event(f"{designation} {username} checked in via profile")
+                    st.success(f"{designation} {username} successfully checked in!")
+                    st.balloons()
     
     else:
         # Face recognition check-in
@@ -641,11 +667,19 @@ def checkin_page():
             designation = st.selectbox("Designation", ["Student", "Faculty", "Other"], key="face_designation")
         with col2:
             if designation == "Student":
-                reg_no = st.text_input("Registration Number", key="face_reg")
+                reg_no = st.text_input("Registration Number (YYYYNNN)", key="face_reg", placeholder="e.g., 2024113")
                 room_no = st.selectbox("Hostel", ["H1", "H2", "H3", "H4", "H5", "H6", "H7", "GH", "NGH"], key="face_hostel")
+                if reg_no:
+                    valid, msg = validate_registration_number(reg_no)
+                    if not valid:
+                        st.error(f"INVALID: {msg}")
             elif designation == "Faculty":
-                reg_no = st.text_input("Employee ID", key="face_emp")
+                reg_no = st.text_input("Employee ID (EMP###)", key="face_emp", placeholder="e.g., EMP456")
                 room_no = st.selectbox("Residence", ["D", "E", "F"], key="face_res")
+                if reg_no:
+                    valid, msg = validate_employee_id(reg_no)
+                    if not valid:
+                        st.error(f"INVALID: {msg}")
             else:
                 reg_no = st.text_input("ID Number", key="face_id")
                 room_no = "N/A"
@@ -700,14 +734,28 @@ def checkin_page():
                 )
                 
                 if recognized_name and recognized_name == person_name:
-                    st.success("IDENTITY VERIFIED - Entry Authorized")
-                    st.balloons()
-                    # Auto check-in on successful verification
-                    st.session_state.checkin_list.insert(
-                        person_name, reg_no, designation, gender_code, room_no, None
-                    )
-                    save_checkins(st.session_state.checkin_list)
-                    st.session_state.event_log.add_event(f"{designation} {person_name} checked in via face recognition")
+                    # Validate ID before allowing check-in
+                    id_valid = True
+                    if designation == "Student":
+                        valid, msg = validate_registration_number(reg_no)
+                        if not valid:
+                            st.error(f"INVALID REGISTRATION: {msg}")
+                            id_valid = False
+                    elif designation == "Faculty":
+                        valid, msg = validate_employee_id(reg_no)
+                        if not valid:
+                            st.error(f"INVALID EMPLOYEE ID: {msg}")
+                            id_valid = False
+                    
+                    if id_valid:
+                        st.success("IDENTITY VERIFIED - Entry Authorized")
+                        st.balloons()
+                        # Auto check-in on successful verification
+                        st.session_state.checkin_list.insert(
+                            person_name, reg_no, designation, gender_code, room_no, None
+                        )
+                        save_checkins(st.session_state.checkin_list)
+                        st.session_state.event_log.add_event(f"{designation} {person_name} checked in via face recognition")
                 elif recognized_name:
                     st.warning(f"Face recognized as {recognized_name}, not {person_name}")
                     st.session_state.alert_system.add_alert(2, f"Identity mismatch: {person_name}", "Main Gate")
@@ -1075,13 +1123,6 @@ def dashboard_page():
     if data:
         df = pd.DataFrame(data)
         st.dataframe(df, use_container_width=True)
-        
-        # Sorted registration numbers
-        reg_numbers = st.session_state.checkin_list.get_student_reg_numbers()
-        if reg_numbers:
-            sorted_regs = sort_reg_numbers(reg_numbers)
-            st.markdown("**Sorted Personnel IDs**")
-            st.write(sorted_regs)
     else:
         st.info("No personnel currently registered in system")
 
@@ -1227,10 +1268,32 @@ def analytics_page():
     </p>
     """, unsafe_allow_html=True)
     
-    # Get data
-    data = st.session_state.checkin_list.to_list()
-    students, faculty, others = st.session_state.checkin_list.get_counts()
-    total_checked_in = students + faculty + others
+    # Get data and filter for valid entries only
+    raw_data = st.session_state.checkin_list.to_list()
+    
+    # Filter out invalid entries - only show verified personnel in analytics
+    valid_data = []
+    for entry in raw_data:
+        designation = entry.get("Designation", "")
+        reg_no = entry.get("Reg No", "")
+        
+        if designation == "Student":
+            valid, _ = validate_registration_number(reg_no)
+            if valid:
+                valid_data.append(entry)
+        elif designation == "Faculty":
+            valid, _ = validate_employee_id(reg_no)
+            if valid:
+                valid_data.append(entry)
+        else:
+            # Other designations pass through
+            valid_data.append(entry)
+    
+    # Count only valid entries
+    valid_students = sum(1 for e in valid_data if e.get("Designation") == "Student")
+    valid_faculty = sum(1 for e in valid_data if e.get("Designation") == "Faculty")
+    valid_others = sum(1 for e in valid_data if e.get("Designation") == "Other")
+    total_checked_in = valid_students + valid_faculty + valid_others
     active_alerts = st.session_state.alert_system.count_alerts()
     total_guards = st.session_state.guard_tree.count_nodes()
     
@@ -1244,21 +1307,21 @@ def analytics_page():
     with cols[0]:
         st.metric("TOTAL ACTIVE", total_checked_in)
     with cols[1]:
-        st.metric("STUDENTS", students)
+        st.metric("STUDENTS", valid_students)
     with cols[2]:
-        st.metric("FACULTY", faculty)
+        st.metric("FACULTY", valid_faculty)
     with cols[3]:
-        st.metric("VISITORS", others)
+        st.metric("VISITORS", valid_others)
     with cols[4]:
         st.metric("THREATS", active_alerts)
     
     st.markdown("---")
     
-    if not data:
-        st.info("No check-in data available for analytics")
+    if not valid_data:
+        st.info("No verified personnel data available for analytics")
         return
     
-    df = pd.DataFrame(data)
+    df = pd.DataFrame(valid_data)
     
     # Row 1: Distribution Charts
     st.subheader("Population Distribution Analysis")
