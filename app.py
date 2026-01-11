@@ -1,13 +1,4 @@
-"""
-IntruWatch - Security Edition
-Security Monitoring System for GIKI Campus
 
-Advanced intrusion detection and access control system featuring:
-- Real-time surveillance monitoring
-- Biometric face recognition
-- Priority-based threat management
-- Campus-wide navigation and pathfinding
-"""
 
 import os
 import numpy as np
